@@ -190,6 +190,19 @@
    Surges = trending events · Day/night = the planet spinning
 ===================================================================== */
 
+// On-screen error reporter — so failures show up on mobile, not a frozen boot.
+window.addEventListener('error', e=>{
+  const intro=document.getElementById('intro');
+  if(intro){
+    const p=intro.querySelector('p');
+    if(p){ p.style.color='#ff5d8f'; p.style.letterSpacing='.08em'; p.style.maxWidth='80vw'; p.style.textAlign='center';
+      p.textContent='ERROR: '+(e.message||'unknown')+(e.lineno?(' @'+e.lineno):''); }
+  }
+});
+if(typeof THREE==='undefined'){
+  throw new Error('Three.js failed to load — check the CDN / network');
+}
+
 const SITES = {
   google:    { name:'Google',    pop:100, floors:100, visits:'85.0 B', type:'Search Citadel',        pos:[  0,   0], accent:'#ffd76a' },
   youtube:   { name:'YouTube',   pop: 90, floors: 90, visits:'33.0 B', type:'Entertainment Complex', pos:[-38, -16], accent:'#ff4d5e' },
@@ -603,22 +616,19 @@ const carMat=new THREE.MeshBasicMaterial({color:0xffffff});
 const carMesh=new THREE.InstancedMesh(carGeo,carMat,CAP);
 carMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
 const _col=new THREE.Color();
+const hlPos=new Float32Array(CAP*3);
+const hlCol=new Float32Array(CAP*3);
 for(let i=0;i<CAP;i++){
   _col.set(carColors[(Math.random()*carColors.length)|0]);
   carMesh.setColorAt(i,_col);
+  hlCol[i*3]=_col.r; hlCol[i*3+1]=_col.g; hlCol[i*3+2]=_col.b;
+  hlPos[i*3+1]=-100;
 }
 carMesh.instanceColor.needsUpdate=true;
 scene.add(carMesh);
 
 // headlight glow (additive points, mirrors car positions)
 const hlGeo=new THREE.BufferGeometry();
-const hlPos=new Float32Array(CAP*3);
-const hlCol=new Float32Array(CAP*3);
-for(let i=0;i<CAP;i++){
-  carMesh.getColorAt(i,_col);
-  hlCol[i*3]=_col.r; hlCol[i*3+1]=_col.g; hlCol[i*3+2]=_col.b;
-  hlPos[i*3+1]=-100;
-}
 hlGeo.setAttribute('position',new THREE.BufferAttribute(hlPos,3).setUsage(THREE.DynamicDrawUsage));
 hlGeo.setAttribute('color',new THREE.BufferAttribute(hlCol,3));
 const hlMat=new THREE.PointsMaterial({map:glowTex,size:2.6,transparent:true,opacity:0,vertexColors:true,

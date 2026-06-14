@@ -18,7 +18,8 @@
   #scene{position:fixed;inset:0;display:block;cursor:grab}
   #scene.dragging{cursor:grabbing}
   .hud{position:fixed;z-index:10;pointer-events:none}
-  button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer}
+  button{font-family:inherit;color:inherit;background:none;border:none;cursor:pointer;touch-action:manipulation;
+    -webkit-tap-highlight-color:transparent}
 
   /* ---------- brand ---------- */
   #brand{top:22px;left:24px}
@@ -29,14 +30,15 @@
   #brand p{margin-top:7px;font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--dim)}
 
   /* ---------- clock + time controls ---------- */
-  #clock{top:22px;right:24px;text-align:right;pointer-events:auto}
+  #clock{top:22px;right:24px;text-align:right;pointer-events:auto;z-index:16}
   #clock .time{font-size:24px;font-weight:600;letter-spacing:.08em;font-variant-numeric:tabular-nums}
   #clock .phase{margin-top:4px;font-size:10px;letter-spacing:.26em;text-transform:uppercase;color:var(--accent)}
   #speed{margin-top:9px;display:flex;gap:6px;justify-content:flex-end}
-  #speed button{font-size:10px;letter-spacing:.1em;padding:4px 9px;border:1px solid var(--line);border-radius:6px;
-    color:var(--dim);background:rgba(10,14,26,.5);transition:.15s}
+  #speed button{font-size:10px;letter-spacing:.1em;padding:7px 12px;border:1px solid var(--line);border-radius:6px;
+    color:var(--dim);background:rgba(10,14,26,.55);transition:.15s}
   #speed button:hover{color:var(--ink);border-color:rgba(120,140,190,.5)}
   #speed button.on{color:#06121a;background:var(--accent);border-color:var(--accent);font-weight:600}
+  #speed button:active{transform:scale(.94)}
 
   /* ---------- legend ---------- */
   #legend{bottom:22px;left:24px;background:var(--panel);border:1px solid var(--line);border-radius:10px;
@@ -185,6 +187,15 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/build/three.min.js"></script>
 <script>window.THREE||document.write('<script src="https://unpkg.com/three@0.128.0/build/three.min.js"><\/script>');</script>
 <script>window.THREE||document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"><\/script>');</script>
+<!-- post-processing stack (bloom + gamma + FXAA). Page degrades gracefully if any fail. -->
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/EffectComposer.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/RenderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/CopyShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/LuminosityHighPassShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/ShaderPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/postprocessing/UnrealBloomPass.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/GammaCorrectionShader.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/shaders/FXAAShader.js"></script>
 <script>
 /* =====================================================================
    DATAPOLIS — the internet rendered as a living city
@@ -207,50 +218,77 @@ if(typeof THREE==='undefined'){
 
 const SITES = {
   google:    { name:'Google',    pop:100, floors:100, visits:'85.0 B', type:'Search Citadel',        pos:[  0,   0], accent:'#ffd76a' },
-  youtube:   { name:'YouTube',   pop: 90, floors: 90, visits:'33.0 B', type:'Entertainment Complex', pos:[-38, -16], accent:'#ff4d5e' },
-  tiktok:    { name:'TikTok',    pop: 80, floors: 80, visits:'18.2 B', type:'Neon Skyscraper',       pos:[ 36, -22], accent:'#46f3ff' },
-  instagram: { name:'Instagram', pop: 75, floors: 75, visits:'12.4 B', type:'Glass Tower',           pos:[ 44,  14], accent:'#ff7ad0' },
-  amazon:    { name:'Amazon',    pop: 70, floors: 70, visits:'8.4 B',  type:'Warehouse District',    pos:[ 10, -54], accent:'#ffb24d' },
-  netflix:   { name:'Netflix',   pop: 60, floors: 60, visits:'6.1 B',  type:'Cinema District',       pos:[-56, -46], accent:'#ff3344' },
-  reddit:    { name:'Reddit',    pop: 50, floors: 50, visits:'5.2 B',  type:'Residential District',  pos:[-46, 28], accent:'#ff5e2e' },
-  wikipedia: { name:'Wikipedia', pop: 35, floors: 35, visits:'4.4 B',  type:'Grand Library',         pos:[  0,  48], accent:'#ffe9a3' },
+  youtube:   { name:'YouTube',   pop: 90, floors: 90, visits:'33.0 B', type:'Entertainment Complex', pos:[-50, -20], accent:'#ff4d5e' },
+  tiktok:    { name:'TikTok',    pop: 80, floors: 80, visits:'18.2 B', type:'Neon Skyscraper',       pos:[ 46, -30], accent:'#46f3ff' },
+  facebook:  { name:'Facebook',  pop: 78, floors: 78, visits:'11.8 B', type:'Social Megablock',      pos:[ 72,  -6], accent:'#4a8cff' },
+  instagram: { name:'Instagram', pop: 75, floors: 75, visits:'12.4 B', type:'Glass Tower',           pos:[ 58,  18], accent:'#ff7ad0' },
+  amazon:    { name:'Amazon',    pop: 70, floors: 70, visits:'8.4 B',  type:'Warehouse District',    pos:[ 14, -68], accent:'#ffb24d' },
+  x:         { name:'X',         pop: 65, floors: 65, visits:'7.1 B',  type:'Signal Spire',          pos:[-26, -56], accent:'#e7e9ea' },
+  netflix:   { name:'Netflix',   pop: 60, floors: 60, visits:'6.1 B',  type:'Cinema District',       pos:[-72, -58], accent:'#ff3344' },
+  reddit:    { name:'Reddit',    pop: 50, floors: 50, visits:'5.2 B',  type:'Residential District',  pos:[-58,  36], accent:'#ff5e2e' },
+  twitch:    { name:'Twitch',    pop: 45, floors: 45, visits:'4.6 B',  type:'Streaming Quarter',     pos:[-84, -10], accent:'#a970ff' },
+  spotify:   { name:'Spotify',   pop: 40, floors: 40, visits:'4.2 B',  type:'Sound Rotunda',         pos:[ 36,  54], accent:'#1db954' },
+  wikipedia: { name:'Wikipedia', pop: 35, floors: 35, visits:'4.4 B',  type:'Grand Library',         pos:[  0,  62], accent:'#ffe9a3' },
 };
 Object.values(SITES).sort((a,b)=>b.pop-a.pop).forEach((s,i)=>s.rank=i+1);
 
 const ROADS = [ // [a, b, strength 1–3]
-  ['google','youtube',3], ['google','instagram',2], ['google','wikipedia',2],
-  ['google','amazon',2],  ['google','reddit',2],    ['youtube','netflix',2],
-  ['youtube','tiktok',2], ['tiktok','instagram',2], ['reddit','wikipedia',1],
+  ['google','youtube',3],   ['google','instagram',2], ['google','wikipedia',2],
+  ['google','amazon',2],    ['google','reddit',2],    ['youtube','netflix',2],
+  ['youtube','tiktok',2],   ['tiktok','instagram',2], ['reddit','wikipedia',1],
   ['amazon','netflix',1],
+  ['google','facebook',2],  ['facebook','instagram',2],
+  ['google','x',2],         ['x','amazon',1],
+  ['youtube','twitch',2],   ['reddit','twitch',1],
+  ['tiktok','spotify',2],   ['spotify','wikipedia',1],
 ];
 
 const THEMES = {
   google:    { facade:'#dfe3ec', win:'#ffd76a', density:.62 },
   youtube:   { facade:'#2a2030', win:'#ff4d5e', density:.55 },
   tiktok:    { facade:'#0e1220', win:'#46f3ff', density:.5  },
+  facebook:  { facade:'#141d33', win:'#6ea8ff', density:.55 },
   instagram: { facade:'#241a33', win:'#ff7ad0', density:.58 },
   amazon:    { facade:'#3a3326', win:'#ffb24d', density:.45 },
+  x:         { facade:'#0b0d12', win:'#dfe5ea', density:.42 },
   netflix:   { facade:'#1c1216', win:'#ff3344', density:.5  },
   reddit:    { facade:'#3c2a20', win:'#ffb38a', density:.6  },
+  twitch:    { facade:'#1b1230', win:'#a970ff', density:.5  },
+  spotify:   { facade:'#0e1f16', win:'#3ddc78', density:.5  },
   wikipedia: { facade:'#d9d4c5', win:'#fff0c2', density:.55 },
 };
 
 const FLOOR_H = 0.34;
 const reduceMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+const IS_MOBILE = window.matchMedia('(pointer:coarse)').matches;
 
 /* ---------------- renderer / scene ---------------- */
 const canvas = document.getElementById('scene');
 const renderer = new THREE.WebGLRenderer({canvas, antialias:true});
-renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.setPixelRatio(Math.min(devicePixelRatio, IS_MOBILE?1.6:2));
 renderer.setSize(innerWidth, innerHeight);
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.15;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
 const scene = new THREE.Scene();
-scene.fog = new THREE.Fog(0x0a0e1f, 130, 420);
+scene.fog = new THREE.Fog(0x0a0e1f, 140, 520);
 
-const camera = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, .1, 1200);
+const camera = new THREE.PerspectiveCamera(52, innerWidth/innerHeight, .1, 1400);
 
 const hemi    = new THREE.HemisphereLight(0xbfd9ff, 0x202738, .55); scene.add(hemi);
-const sunL    = new THREE.DirectionalLight(0xffffff, .9); sunL.position.set(60,90,40); scene.add(sunL);
+const sunL    = new THREE.DirectionalLight(0xffffff, .9);
+sunL.position.set(60,90,40);
+sunL.castShadow = true;
+const SHADOW_RES = IS_MOBILE?1024:2048;
+sunL.shadow.mapSize.set(SHADOW_RES, SHADOW_RES);
+sunL.shadow.camera.left=-160; sunL.shadow.camera.right=160;
+sunL.shadow.camera.top=160;   sunL.shadow.camera.bottom=-160;
+sunL.shadow.camera.near=10;   sunL.shadow.camera.far=600;
+sunL.shadow.bias=-0.0005;
+scene.add(sunL);
 const ambient = new THREE.AmbientLight(0x404a66, .35); scene.add(ambient);
 
 /* ---------------- shared glow texture ---------------- */
@@ -267,18 +305,18 @@ const softTex  = radialTexture([[0,'rgba(255,255,255,.9)'],[ .55,'rgba(255,255,2
 
 /* ---------------- ground / grid ---------------- */
 const groundMat = new THREE.MeshStandardMaterial({color:0x0c0f1a, roughness:1});
-const ground = new THREE.Mesh(new THREE.PlaneGeometry(800,800), groundMat);
-ground.rotation.x=-Math.PI/2; ground.position.y=-0.02; scene.add(ground);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000,1000), groundMat);
+ground.rotation.x=-Math.PI/2; ground.position.y=-0.02; ground.receiveShadow=true; scene.add(ground);
 
-const grid = new THREE.GridHelper(800, 110, 0x1c2745, 0x141b30);
+const grid = new THREE.GridHelper(1000, 130, 0x1c2745, 0x141b30);
 grid.material.transparent=true; grid.material.opacity=.5; scene.add(grid);
 
 /* ---------------- sky: stars, sun, moon, clouds ---------------- */
 const starGeo=new THREE.BufferGeometry();
 {
-  const N=1100, arr=new Float32Array(N*3);
+  const N=1400, arr=new Float32Array(N*3);
   for(let i=0;i<N;i++){
-    const th=Math.random()*Math.PI*2, ph=Math.acos(Math.random()*.85), r=520;
+    const th=Math.random()*Math.PI*2, ph=Math.acos(Math.random()*.85), r=600;
     arr[i*3]=r*Math.sin(ph)*Math.cos(th);
     arr[i*3+1]=r*Math.cos(ph)+10;
     arr[i*3+2]=r*Math.sin(ph)*Math.sin(th);
@@ -289,19 +327,19 @@ const starMat=new THREE.PointsMaterial({color:0xcfe2ff,size:1.2,transparent:true
 scene.add(new THREE.Points(starGeo,starMat));
 
 const sunSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTexture([[0,'rgba(255,248,220,1)'],[.2,'rgba(255,214,120,.9)'],[1,'rgba(255,170,80,0)']]),transparent:true,fog:false,depthWrite:false}));
-sunSpr.scale.set(90,90,1); scene.add(sunSpr);
+sunSpr.scale.set(96,96,1); scene.add(sunSpr);
 const moonSpr=new THREE.Sprite(new THREE.SpriteMaterial({map:radialTexture([[0,'rgba(230,240,255,1)'],[.18,'rgba(190,210,255,.85)'],[1,'rgba(150,180,255,0)']]),transparent:true,fog:false,depthWrite:false}));
-moonSpr.scale.set(42,42,1); scene.add(moonSpr);
+moonSpr.scale.set(46,46,1); scene.add(moonSpr);
 
 const clouds=[];
 {
   const cm=new THREE.SpriteMaterial({map:softTex,transparent:true,opacity:0,color:0xffffff,depthWrite:false,fog:false});
-  for(let i=0;i<11;i++){
+  for(let i=0;i<13;i++){
     const m=cm.clone();
     const s=new THREE.Sprite(m);
-    const sc=40+Math.random()*60;
+    const sc=44+Math.random()*66;
     s.scale.set(sc,sc*.34,1);
-    s.position.set((Math.random()-.5)*460, 78+Math.random()*46, (Math.random()-.5)*460);
+    s.position.set((Math.random()-.5)*520, 80+Math.random()*52, (Math.random()-.5)*520);
     s.userData.v=.6+Math.random()*1.2;
     scene.add(s); clouds.push(s);
   }
@@ -327,6 +365,7 @@ function windowCanvases(theme){
     }
   }
   const t1=new THREE.CanvasTexture(day), t2=new THREE.CanvasTexture(nit);
+  t1.encoding=THREE.sRGBEncoding; t2.encoding=THREE.sRGBEncoding;
   t1.wrapS=t1.wrapT=t2.wrapS=t2.wrapT=THREE.RepeatWrapping;
   return {map:t1, emissive:t2};
 }
@@ -368,7 +407,7 @@ const glowSprites=[];
 /* ---------------- building helpers ---------------- */
 const city=new THREE.Group(); scene.add(city);
 const hoverTargets=[];
-function tagGroup(g,key){ g.traverse(o=>{ if(o.isMesh){o.userData.siteKey=key; hoverTargets.push(o);} }); }
+function tagGroup(g,key){ g.traverse(o=>{ if(o.isMesh){o.userData.siteKey=key; o.castShadow=true; o.receiveShadow=true; hoverTargets.push(o);} }); }
 
 function block(siteKey,w,h,d){
   const wall=towerMaterial(siteKey,Math.max(1,Math.round(w/4)),Math.max(1,Math.round(h/FLOOR_H/12)));
@@ -448,6 +487,25 @@ function makeLibrary(key,floors){
   return g;
 }
 
+function makeRotunda(key,floors){
+  const g=new THREE.Group();
+  const h=floors*FLOOR_H*.78, r=7.2;
+  const wall=towerMaterial(key,4,Math.max(1,Math.round(h/FLOOR_H/12)));
+  const body=new THREE.Mesh(new THREE.CylinderGeometry(r*.82,r,h,24),wall);
+  body.position.y=h/2; g.add(body);
+  const ring=new THREE.Mesh(new THREE.TorusGeometry(r*.86,.34,10,28),neonMaterial(SITES[key].accent));
+  ring.rotation.x=Math.PI/2; ring.position.y=h*.92; g.add(ring);
+  const cap=new THREE.Mesh(new THREE.CylinderGeometry(r*.5,r*.82,h*.12,24),roofMaterial(key));
+  cap.position.y=h+h*.06; g.add(cap);
+  const spire=new THREE.Mesh(new THREE.CylinderGeometry(.1,.16,5,8),neonMaterial(SITES[key].accent));
+  spire.position.y=h+3; g.add(spire);
+  const beacon=new THREE.Mesh(new THREE.SphereGeometry(.34,8,8),neonMaterial('#ff3b3b',true));
+  beacon.position.y=h+5.6; g.add(beacon);
+  const gs=crownGlowSprite(SITES[key].accent,15); gs.position.y=h+1; g.add(gs); glowSprites.push(gs.material);
+  g.userData.topY=h+7;
+  return g;
+}
+
 /* ---------------- construct city ---------------- */
 const builders={
   google(){ return makeTower('google',11,11,SITES.google.floors,{crown:'#51e8ff',tiers:[[1,.55],[.8,.3],[.58,.15]]}); },
@@ -478,6 +536,14 @@ const builders={
     return makeDistrict('reddit',blocks,SITES.reddit.floors*.5,{w:5.4,d:5.4,crown:'#ff5e2e',tiers:[[1,.78],[.66,.22]]});
   },
   wikipedia(){ return makeLibrary('wikipedia',SITES.wikipedia.floors); },
+  facebook(){ return makeTower('facebook',12,9.5,SITES.facebook.floors,{crown:'#4a8cff',tiers:[[1,.5],[.82,.3],[.6,.2]]}); },
+  x(){ return makeTower('x',7,7,SITES.x.floors,{crown:'#ffffff',tiers:[[1,.8],[.55,.2]]}); },
+  twitch(){
+    return makeDistrict('twitch',
+      [[-7,4,10,7,6],[6,7,9,6,4]],
+      SITES.twitch.floors*.7,{x:5,z:-3,w:7,d:7,screen:'#a970ff',crown:'#a970ff',tiers:[[1,.75],[.6,.25]]});
+  },
+  spotify(){ return makeRotunda('spotify',SITES.spotify.floors); },
 };
 for(const key in SITES){
   const s=SITES[key];
@@ -536,6 +602,7 @@ ROADS.forEach(([a,b,strength],ri)=>{
   const base=new THREE.Mesh(new THREE.PlaneGeometry(width,len),baseMat);
   base.rotation.x=-Math.PI/2; base.rotation.z=angle;
   base.position.copy(mid); base.position.y=.01+ri*.0008;
+  base.receiveShadow=true;
   scene.add(base);
 
   // animated center dashes
@@ -588,6 +655,83 @@ ROADS.forEach(([a,b,strength],ri)=>{
   var lampGlowMat=new THREE.PointsMaterial({map:glowTex,color:0xffd9a0,size:3.4,transparent:true,opacity:0,
     blending:THREE.AdditiveBlending,depthWrite:false,sizeAttenuation:true});
   scene.add(new THREE.Points(lg,lampGlowMat));
+}
+
+/* ---------------- procedural background fill ---------------- */
+const fillNightMats=[];
+{
+  const FILLER={facade:'#161c2c',win:'#9fb6d8',density:.3};
+  // shared window-style texture for filler (built once)
+  const fc=document.createElement('canvas'); fc.width=64; fc.height=128;
+  const fx=fc.getContext('2d');
+  fx.fillStyle='#000'; fx.fillRect(0,0,64,128);
+  for(let r=0;r<10;r++)for(let c=0;c<5;c++){
+    if(Math.random()<FILLER.density){
+      fx.fillStyle=FILLER.win; fx.globalAlpha=.35+Math.random()*.5;
+      fx.fillRect(c*12+3,r*12+3,7,7); fx.globalAlpha=1;
+    }
+  }
+  const femis=new THREE.CanvasTexture(fc); femis.encoding=THREE.sRGBEncoding;
+  femis.wrapS=femis.wrapT=THREE.RepeatWrapping;
+
+  const siteXY=Object.values(SITES).map(s=>({x:s.pos[0],z:s.pos[1]}));
+  function nearRoad(x,z){
+    for(const rd of roadDefs){
+      const px=x-rd.A.x, pz=z-rd.A.z;
+      let t=(px*rd.dir.x+pz*rd.dir.z)/rd.len; t=Math.max(0,Math.min(1,t));
+      const cx=rd.A.x+rd.dir.x*rd.len*t, cz=rd.A.z+rd.dir.z*rd.len*t;
+      const dx=x-cx, dz=z-cz;
+      if(dx*dx+dz*dz < (rd.width/2+3.4)*(rd.width/2+3.4)) return true;
+    }
+    return false;
+  }
+  const cells=[];
+  for(let gx=-110; gx<=110; gx+=9)for(let gz=-110; gz<=110; gz+=9){
+    const x=gx+(Math.random()-.5)*5.5, z=gz+(Math.random()-.5)*5.5;
+    const dC=Math.hypot(x,z);
+    if(dC>116) continue;
+    if(Math.random()<.42) continue;
+    let skip=false;
+    for(const s of siteXY){ if(Math.hypot(x-s.x,z-s.z)<17){skip=true;break;} }
+    if(skip) continue;
+    if(nearRoad(x,z)) continue;
+    cells.push({x,z,dC});
+  }
+  // 3 height classes
+  const classes=[
+    {min:2,max:5,geo:new THREE.BoxGeometry(1,1,1)},
+    {min:5,max:9,geo:new THREE.BoxGeometry(1,1,1)},
+    {min:9,max:16,geo:new THREE.BoxGeometry(1,1,1)},
+  ];
+  const buckets=[[],[],[]];
+  cells.forEach(c=>{
+    let cls=Math.random()<.5?0:(Math.random()<.6?1:2);
+    if(c.dC<55 && Math.random()<.4) cls=Math.min(2,cls+1); // taller downtown
+    buckets[cls].push(c);
+  });
+  const mm=new THREE.Matrix4(), q=new THREE.Quaternion(),
+        pos=new THREE.Vector3(), scl=new THREE.Vector3();
+  buckets.forEach((bucket,ci)=>{
+    if(!bucket.length) return;
+    const cls=classes[ci];
+    const mat=new THREE.MeshStandardMaterial({
+      color:new THREE.Color(FILLER.facade), roughness:.9, metalness:.04,
+      emissive:new THREE.Color(FILLER.win), emissiveMap:femis, emissiveIntensity:0
+    });
+    mat.userData.dimmer=.5; fillNightMats.push(mat);
+    const im=new THREE.InstancedMesh(cls.geo, mat, bucket.length);
+    im.castShadow=true; im.receiveShadow=true;
+    bucket.forEach((c,i)=>{
+      const w=2.4+Math.random()*3.4, d=2.4+Math.random()*3.4;
+      const h=(cls.min+Math.random()*(cls.max-cls.min));
+      pos.set(c.x,h/2,c.z);
+      q.setFromAxisAngle(new THREE.Vector3(0,1,0), Math.random()<.5?0:Math.PI/2);
+      scl.set(w,h,d);
+      mm.compose(pos,q,scl); im.setMatrixAt(i,mm);
+    });
+    im.instanceMatrix.needsUpdate=true;
+    scene.add(im);
+  });
 }
 
 /* ---------------- cars (instanced + headlight glow points) ---------------- */
@@ -675,7 +819,7 @@ if(!reduceMotion){
 }
 
 /* ---------------- camera ---------------- */
-const HOME={target:new THREE.Vector3(0,7,-4), radius:122, phi:1.1};
+const HOME={target:new THREE.Vector3(0,8,-4), radius:150, phi:1.1};
 let theta=Math.PI*.28, phi=HOME.phi, radius=HOME.radius;
 const target=HOME.target.clone();
 let autoSpin=true, idleTimer=null, focusKey=null;
@@ -688,6 +832,16 @@ function tweenCam(toTarget,toRadius,toPhi,dur=1400){
     fromR:radius,toR:toRadius, fromP:phi,toP:toPhi};
 }
 function easeIO(t){return t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2;}
+
+// reliable tap on iOS: fire once per gesture, dedupe pointerup+click within 350ms
+function tapBind(el,fn){
+  if(!el) return;
+  let last=0;
+  const h=e=>{ const now=performance.now(); if(now-last<350) return; last=now;
+    if(e.cancelable)e.preventDefault(); e.stopPropagation(); fn(e); };
+  el.addEventListener('pointerup',h);
+  el.addEventListener('click',h);
+}
 
 function kickIdle(){
   autoSpin=false; clearTimeout(idleTimer);
@@ -711,9 +865,9 @@ function setFocus(key){
   document.getElementById('fFloors').textContent=s.floors;
   focusEl.classList.add('on');
   tweenCam(new THREE.Vector3(s.pos[0],s.topY*.45,s.pos[1]),
-           Math.max(34,s.topY*1.5), 1.18, 1500);
+           Math.max(36,s.topY*1.55), 1.18, 1500);
 }
-document.getElementById('fClose').onclick=()=>setFocus(null);
+tapBind(document.getElementById('fClose'),()=>setFocus(null));
 addEventListener('keydown',e=>{ if(e.key==='Escape')setFocus(null); });
 
 /* ---------------- input ---------------- */
@@ -748,7 +902,7 @@ addEventListener('pointermove',e=>{
 });
 canvas.addEventListener('wheel',e=>{
   e.preventDefault();
-  radius=Math.min(260,Math.max(26,radius+e.deltaY*.08));
+  radius=Math.min(320,Math.max(26,radius+e.deltaY*.08));
   if(camTween)camTween=null;
   kickIdle();
 },{passive:false});
@@ -756,7 +910,7 @@ let pinchD=0;
 canvas.addEventListener('touchmove',e=>{
   if(e.touches.length===2){
     const d=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);
-    if(pinchD)radius=Math.min(260,Math.max(26,radius-(d-pinchD)*.25));
+    if(pinchD)radius=Math.min(320,Math.max(26,radius-(d-pinchD)*.25));
     pinchD=d;kickIdle();if(camTween)camTween=null;
   }
 },{passive:true});
@@ -786,7 +940,7 @@ function setHover(key){
     b.className='item'; b.dataset.k=k;
     b.innerHTML=`<span class="top"><span class="nm">${s.name}</span><span class="rk">#${s.rank}</span></span>
       <span class="bar"><i style="width:${s.pop}%;background:${s.accent}"></i></span>`;
-    b.onclick=()=>setFocus(focusKey===k?null:k);
+    tapBind(b,()=>setFocus(focusKey===k?null:k));
     list.appendChild(b);
   });
 }
@@ -801,12 +955,22 @@ const SUN_WARM=new THREE.Color('#ffd9a8'), SUN_WHITE=new THREE.Color('#ffffff');
 const _sky=new THREE.Color(),_fog=new THREE.Color(),_gr=new THREE.Color(),_ro=new THREE.Color(),_sc=new THREE.Color();
 let cycleT=.86; // begin at night for the neon reveal
 let timeScale=1;
-document.querySelectorAll('#speed button').forEach(b=>{
-  b.onclick=()=>{
+{
+  const speedBar=document.getElementById('speed');
+  const btns=speedBar?[...speedBar.querySelectorAll('button')]:[];
+  let last=0;
+  const handle=e=>{
+    const b=e.target.closest('button'); if(!b||!speedBar.contains(b)) return;
+    const now=performance.now(); if(now-last<350) return; last=now;
+    if(e.cancelable)e.preventDefault(); e.stopPropagation();
     timeScale=+b.dataset.s;
-    document.querySelectorAll('#speed button').forEach(x=>x.classList.toggle('on',x===b));
+    btns.forEach(x=>x.classList.toggle('on',x===b));
   };
-});
+  if(speedBar){
+    speedBar.addEventListener('pointerup',handle);
+    speedBar.addEventListener('click',handle);
+  }
+}
 
 const timeEl=document.getElementById('cityTime');
 const phaseEl=document.getElementById('cityPhase');
@@ -818,9 +982,9 @@ function applyCycle(elapsed){
   night=1-dayness;
   const horizon=THREE.MathUtils.clamp(1-Math.abs(Math.sin(sunAng))*3,0,1); // sunset warmth
 
-  sunSpr.position.set(Math.cos(sunAng)*430,Math.sin(sunAng)*430,-160);
+  sunSpr.position.set(Math.cos(sunAng)*470,Math.sin(sunAng)*470,-160);
   sunSpr.material.opacity=THREE.MathUtils.clamp(Math.sin(sunAng)+.12,0,1);
-  moonSpr.position.set(Math.cos(sunAng+Math.PI)*430,Math.sin(sunAng+Math.PI)*430,160);
+  moonSpr.position.set(Math.cos(sunAng+Math.PI)*470,Math.sin(sunAng+Math.PI)*470,160);
   moonSpr.material.opacity=THREE.MathUtils.clamp(Math.sin(sunAng+Math.PI)+.05,0,.95);
 
   sunL.position.set(Math.cos(sunAng)*120,Math.max(Math.sin(sunAng)*120,-20)+10,50);
@@ -843,26 +1007,53 @@ function applyCycle(elapsed){
   clouds.forEach(c=>c.material.opacity=dayness*.42);
   grid.material.opacity=.16+night*.36;
 
-  const winBase=night*1.35;
-  nightMats.forEach(m=>m.emissiveIntensity=winBase);
+  const winBase=night*1.5;
+  nightMats.forEach(m=>m.emissiveIntensity=winBase*(m.userData.dimmer||1));
+  fillNightMats.forEach(m=>m.emissiveIntensity=winBase*(m.userData.dimmer||1));
   if(hovered||focusKey){
     const key=focusKey||hovered;
-    (SITES[key].mats||[]).forEach(m=>m.emissiveIntensity=winBase+.55);
+    (SITES[key].mats||[]).forEach(m=>m.emissiveIntensity=winBase+.6);
   }
-  glowMats.forEach(m=>m.emissiveIntensity=.45+night*1.5);
-  blinkMats.forEach(m=>m.emissiveIntensity=(0.25+night*.9)*(0.55+0.45*Math.sin(elapsed*3.2+m.userData.phase)));
-  glowSprites.forEach(m=>m.opacity=night*.5);
+  glowMats.forEach(m=>m.emissiveIntensity=.5+night*1.6);
+  blinkMats.forEach(m=>m.emissiveIntensity=(0.28+night*.95)*(0.55+0.45*Math.sin(elapsed*3.2+m.userData.phase)));
+  glowSprites.forEach(m=>m.opacity=night*.55);
   roadDefs.forEach(rd=>{
     rd.flash=Math.max(0,rd.flash-0.012);
-    rd.edgeMat.emissiveIntensity=.06+night*.8+rd.flash*1.8;
+    rd.edgeMat.emissiveIntensity=.08+night*.9+rd.flash*1.8;
   });
   dashMats.forEach(d=>d.m.opacity=.1+night*.45);
+  if(bloomPass) bloomPass.strength=.28+night*.55;
 
   const hrs=(cycleT*24)%24;
   timeEl.textContent=`${String(Math.floor(hrs)).padStart(2,'0')}:${String(Math.floor((hrs%1)*60)).padStart(2,'0')}`;
-  phaseEl.textContent=dayness>.6?'○ Daylight Routing':dayness>.15?'◐ Twilight Window':'● Night Grid Active';
-  phaseEl.style.color=dayness>.6?'#ffd166':'var(--accent)';
+  if(timeScale===0){
+    phaseEl.textContent='⏸ Time Held';
+    phaseEl.style.color='var(--accent2)';
+  }else{
+    phaseEl.textContent=dayness>.6?'○ Daylight Routing':dayness>.15?'◐ Twilight Window':'● Night Grid Active';
+    phaseEl.style.color=dayness>.6?'#ffd166':'var(--accent)';
+  }
 }
+
+/* ---------------- post-processing (bloom + gamma + FXAA) ---------------- */
+let composer=null, bloomPass=null, fxaaPass=null;
+try{
+  if(THREE.EffectComposer && THREE.RenderPass && THREE.UnrealBloomPass && THREE.ShaderPass){
+    composer=new THREE.EffectComposer(renderer);
+    composer.addPass(new THREE.RenderPass(scene,camera));
+    bloomPass=new THREE.UnrealBloomPass(new THREE.Vector2(innerWidth,innerHeight), .7, .5, .62);
+    composer.addPass(bloomPass);
+    if(THREE.GammaCorrectionShader){
+      composer.addPass(new THREE.ShaderPass(THREE.GammaCorrectionShader));
+    }
+    if(THREE.FXAAShader){
+      fxaaPass=new THREE.ShaderPass(THREE.FXAAShader);
+      const pr=renderer.getPixelRatio();
+      fxaaPass.material.uniforms.resolution.value.set(1/(innerWidth*pr),1/(innerHeight*pr));
+      composer.addPass(fxaaPass);
+    }
+  }
+}catch(err){ composer=null; bloomPass=null; fxaaPass=null; }
 
 /* ---------------- main loop ---------------- */
 const clock3=new THREE.Clock();
@@ -933,7 +1124,7 @@ function tick(){
   }
   if(hovered){tip.style.left=mousePix.x+'px';tip.style.top=mousePix.y+'px';}
 
-  renderer.render(scene,camera);
+  if(composer) composer.render(); else renderer.render(scene,camera);
   requestAnimationFrame(tick);
 }
 tick();
@@ -943,6 +1134,12 @@ addEventListener('resize',()=>{
   camera.aspect=innerWidth/innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(innerWidth,innerHeight);
+  if(composer) composer.setSize(innerWidth,innerHeight);
+  if(bloomPass) bloomPass.resolution.set(innerWidth,innerHeight);
+  if(fxaaPass){
+    const pr=renderer.getPixelRatio();
+    fxaaPass.material.uniforms.resolution.value.set(1/(innerWidth*pr),1/(innerHeight*pr));
+  }
 });
 </script>
 </body>

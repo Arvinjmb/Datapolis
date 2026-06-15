@@ -140,11 +140,11 @@
 </div>
 
 <div class="hud" id="clock">
-  <div class="time" id="cityTime">21:00</div>
+  <div class="time" id="cityTime">--:--:--</div>
   <div class="phase" id="cityPhase">● Night Grid Active</div>
   <div id="speed">
     <button data-s="0">⏸ HOLD</button>
-    <button data-s="1" class="on">1×</button>
+    <button data-s="1" class="on">● LIVE</button>
     <button data-s="4">4×</button>
   </div>
 </div>
@@ -304,7 +304,36 @@ const glowTex  = radialTexture([[0,'rgba(255,255,255,1)'],[ .25,'rgba(255,255,25
 const softTex  = radialTexture([[0,'rgba(255,255,255,.9)'],[ .55,'rgba(255,255,255,.32)'],[1,'rgba(255,255,255,0)']]);
 
 /* ---------------- ground / grid ---------------- */
-const groundMat = new THREE.MeshStandardMaterial({color:0x0c0f1a, roughness:1});
+function groundTexture(){
+  const c=document.createElement('canvas'); c.width=c.height=512;
+  const x=c.getContext('2d');
+  x.fillStyle='#e7ecf6'; x.fillRect(0,0,512,512);                 // bright base so the day/night tint shows through
+  x.strokeStyle='rgba(70,86,120,.26)'; x.lineWidth=1;             // fine grooves
+  for(let i=0;i<=512;i+=16){
+    x.beginPath();x.moveTo(i+.5,0);x.lineTo(i+.5,512);x.stroke();
+    x.beginPath();x.moveTo(0,i+.5);x.lineTo(512,i+.5);x.stroke();
+  }
+  x.strokeStyle='rgba(38,52,82,.5)'; x.lineWidth=2.4;             // bold block boundaries
+  for(let i=0;i<=512;i+=128){
+    x.beginPath();x.moveTo(i,0);x.lineTo(i,512);x.stroke();
+    x.beginPath();x.moveTo(0,i);x.lineTo(512,i);x.stroke();
+  }
+  for(let i=0;i<2200;i++){                                        // surface speckle
+    x.fillStyle=`rgba(40,52,80,${Math.random()*.18})`;
+    const s=Math.random()*2+.4; x.fillRect(Math.random()*512,Math.random()*512,s,s);
+  }
+  for(let i=0;i<=512;i+=128)for(let j=0;j<=512;j+=128){           // faint neon nodes at junctions
+    if(Math.random()<.5){
+      x.fillStyle=Math.random()<.5?'rgba(50,150,180,.5)':'rgba(180,80,130,.45)';
+      x.beginPath();x.arc(i,j,2.6,0,7);x.fill();
+    }
+  }
+  const t=new THREE.CanvasTexture(c);
+  t.wrapS=t.wrapT=THREE.RepeatWrapping; t.repeat.set(20,20);
+  t.encoding=THREE.sRGBEncoding; t.anisotropy=renderer.capabilities.getMaxAnisotropy();
+  return t;
+}
+const groundMat = new THREE.MeshStandardMaterial({map:groundTexture(), color:0x0c0f1a, roughness:.95});
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000,1000), groundMat);
 ground.rotation.x=-Math.PI/2; ground.position.y=-0.02; ground.receiveShadow=true; scene.add(ground);
 
@@ -949,11 +978,16 @@ function setHover(key){
 const CYCLE=100;
 const SKY_DAY=new THREE.Color('#a9cde6'), SKY_NIGHT=new THREE.Color('#060913');
 const FOG_DAY=new THREE.Color('#c0dbec'), FOG_NIGHT=new THREE.Color('#0a0e1f');
-const GROUND_DAY=new THREE.Color('#39415a'), GROUND_NIGHT=new THREE.Color('#0c0f1a');
+const GROUND_DAY=new THREE.Color('#39415a'), GROUND_NIGHT=new THREE.Color('#171d2b');
 const ROAD_DAY=new THREE.Color('#2c3247'), ROAD_NIGHT=new THREE.Color('#181d2f');
 const SUN_WARM=new THREE.Color('#ffd9a8'), SUN_WHITE=new THREE.Color('#ffffff');
 const _sky=new THREE.Color(),_fog=new THREE.Color(),_gr=new THREE.Color(),_ro=new THREE.Color(),_sc=new THREE.Color();
-let cycleT=.86; // begin at night for the neon reveal
+// real local time of day as a 0–1 fraction (00:00 → 24:00)
+function realCycleT(){
+  const d=new Date();
+  return (d.getHours()*3600 + d.getMinutes()*60 + d.getSeconds() + d.getMilliseconds()/1000)/86400;
+}
+let cycleT=realCycleT(); // start at the actual current time
 let timeScale=1;
 {
   const speedBar=document.getElementById('speed');
@@ -1024,8 +1058,10 @@ function applyCycle(elapsed){
   dashMats.forEach(d=>d.m.opacity=.1+night*.45);
   if(bloomPass) bloomPass.strength=.28+night*.55;
 
-  const hrs=(cycleT*24)%24;
-  timeEl.textContent=`${String(Math.floor(hrs)).padStart(2,'0')}:${String(Math.floor((hrs%1)*60)).padStart(2,'0')}`;
+  const totalSec=cycleT*86400;
+  const hh=Math.floor(totalSec/3600)%24, mm=Math.floor(totalSec/60)%60, ss=Math.floor(totalSec)%60;
+  const p2=v=>String(v).padStart(2,'0');
+  timeEl.textContent=`${p2(hh)}:${p2(mm)}:${p2(ss)}`;
   if(timeScale===0){
     phaseEl.textContent='⏸ Time Held';
     phaseEl.style.color='var(--accent2)';
@@ -1061,7 +1097,8 @@ let elapsed=0, lastTick=0;
 function tick(){
   const dt=Math.min(clock3.getDelta(),.05);
   elapsed+=dt;
-  cycleT=(cycleT+dt*timeScale/CYCLE)%1;
+  if(timeScale===1) cycleT=realCycleT();              // LIVE — exact real local time, no drift
+  else cycleT=(cycleT+dt*timeScale/CYCLE)%1;           // HOLD freezes, 4× = fast preview
   applyCycle(elapsed);
 
   // clouds drift

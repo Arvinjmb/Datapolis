@@ -152,6 +152,9 @@
 <div class="hud" id="index">
   <h2>City Index — Top Sites</h2>
   <div id="indexList"></div>
+  <div style="margin-top:9px;font-size:9px;letter-spacing:.12em;line-height:1.5;color:var(--dim);text-transform:uppercase">
+    Heights &amp; rank = real monthly web visits<br>Similarweb / Semrush · 2026 · app traffic excl.
+  </div>
 </div>
 
 <div class="hud" id="legend">
@@ -216,19 +219,21 @@ if(typeof THREE==='undefined'){
   throw new Error('Three.js failed to load — check the CDN / network');
 }
 
+// Real monthly WEB visits — Similarweb / Semrush, May 2026 (app traffic not counted).
+// floors are log-scaled from real visits so Google/YouTube tower without flattening the rest.
 const SITES = {
-  google:    { name:'Google',    pop:100, floors:100, visits:'85.0 B', type:'Search Citadel',        pos:[  0,   0], accent:'#ffd76a' },
-  youtube:   { name:'YouTube',   pop: 90, floors: 90, visits:'33.0 B', type:'Entertainment Complex', pos:[-50, -20], accent:'#ff4d5e' },
-  tiktok:    { name:'TikTok',    pop: 80, floors: 80, visits:'18.2 B', type:'Neon Skyscraper',       pos:[ 46, -30], accent:'#46f3ff' },
-  facebook:  { name:'Facebook',  pop: 78, floors: 78, visits:'11.8 B', type:'Social Megablock',      pos:[ 72,  -6], accent:'#4a8cff' },
-  instagram: { name:'Instagram', pop: 75, floors: 75, visits:'12.4 B', type:'Glass Tower',           pos:[ 58,  18], accent:'#ff7ad0' },
-  amazon:    { name:'Amazon',    pop: 70, floors: 70, visits:'8.4 B',  type:'Warehouse District',    pos:[ 14, -68], accent:'#ffb24d' },
-  x:         { name:'X',         pop: 65, floors: 65, visits:'7.1 B',  type:'Signal Spire',          pos:[-26, -56], accent:'#e7e9ea' },
-  netflix:   { name:'Netflix',   pop: 60, floors: 60, visits:'6.1 B',  type:'Cinema District',       pos:[-72, -58], accent:'#ff3344' },
-  reddit:    { name:'Reddit',    pop: 50, floors: 50, visits:'5.2 B',  type:'Residential District',  pos:[-58,  36], accent:'#ff5e2e' },
-  twitch:    { name:'Twitch',    pop: 45, floors: 45, visits:'4.6 B',  type:'Streaming Quarter',     pos:[-84, -10], accent:'#a970ff' },
-  spotify:   { name:'Spotify',   pop: 40, floors: 40, visits:'4.2 B',  type:'Sound Rotunda',         pos:[ 36,  54], accent:'#1db954' },
-  wikipedia: { name:'Wikipedia', pop: 35, floors: 35, visits:'4.4 B',  type:'Grand Library',         pos:[  0,  62], accent:'#ffe9a3' },
+  google:    { name:'Google',    pop:100, floors:118, visits:'87.5 B', type:'Search Citadel',        pos:[  0,   0], accent:'#ffd76a' },
+  youtube:   { name:'YouTube',   pop: 88, floors:106, visits:'48.0 B', type:'Entertainment Complex', pos:[-50, -20], accent:'#ff4d5e' },
+  facebook:  { name:'Facebook',  pop: 58, floors: 78, visits:'11.4 B', type:'Social Megablock',      pos:[ 72,  -6], accent:'#4a8cff' },
+  instagram: { name:'Instagram', pop: 46, floors: 67, visits:'6.5 B',  type:'Glass Tower',           pos:[ 58,  18], accent:'#ff7ad0' },
+  wikipedia: { name:'Wikipedia', pop: 38, floors: 60, visits:'4.4 B',  type:'Grand Library',         pos:[  0,  62], accent:'#ffe9a3' },
+  x:         { name:'X',         pop: 37, floors: 59, visits:'4.2 B',  type:'Signal Spire',          pos:[-26, -56], accent:'#e7e9ea' },
+  reddit:    { name:'Reddit',    pop: 36, floors: 59, visits:'4.2 B',  type:'Residential District',  pos:[-58,  36], accent:'#ff5e2e' },
+  amazon:    { name:'Amazon',    pop: 25, floors: 47, visits:'2.3 B',  type:'Warehouse District',    pos:[ 14, -68], accent:'#ffb24d' },
+  tiktok:    { name:'TikTok',    pop: 23, floors: 45, visits:'2.1 B',  type:'Neon Skyscraper',       pos:[ 46, -30], accent:'#46f3ff' },
+  netflix:   { name:'Netflix',   pop: 17, floors: 40, visits:'1.6 B',  type:'Cinema District',       pos:[-72, -58], accent:'#ff3344' },
+  twitch:    { name:'Twitch',    pop:  9, floors: 33, visits:'1.1 B',  type:'Streaming Quarter',     pos:[-84, -10], accent:'#a970ff' },
+  spotify:   { name:'Spotify',   pop:  5, floors: 24, visits:'0.7 B',  type:'Sound Rotunda',         pos:[ 36,  54], accent:'#1db954' },
 };
 Object.values(SITES).sort((a,b)=>b.pop-a.pop).forEach((s,i)=>s.rank=i+1);
 
@@ -291,6 +296,48 @@ sunL.shadow.bias=-0.0005;
 scene.add(sunL);
 const ambient = new THREE.AmbientLight(0x404a66, .35); scene.add(ambient);
 
+/* ---------------- reflection environment (real city lights in glass + wet streets) ---------------- */
+let cubeRT=null, cubeCam=null, envReady=false;
+try{
+  cubeRT = new THREE.WebGLCubeRenderTarget(IS_MOBILE?128:256, {
+    format:THREE.RGBAFormat, generateMipmaps:true, minFilter:THREE.LinearMipmapLinearFilter
+  });
+  cubeCam = new THREE.CubeCamera(1, 1200, cubeRT);
+  cubeCam.position.set(0, 16, 0);
+  scene.add(cubeCam);
+}catch(e){ cubeRT=null; cubeCam=null; }
+function captureEnv(){
+  if(!cubeCam) return;
+  const g=typeof ground!=='undefined'?ground:null;
+  if(g) g.visible=false;                 // avoid self-reflection feedback
+  cubeCam.update(renderer, scene);
+  if(g) g.visible=true;
+  if(!envReady){
+    scene.environment = cubeRT.texture;
+    if(typeof groundMat!=='undefined'){ groundMat.envMap = cubeRT.texture; groundMat.needsUpdate=true; }
+    envReady=true;
+  }
+}
+
+/* ---------------- gradient sky dome (zenith → horizon, with sunset/city glow) ---------------- */
+let skyUniforms=null;
+try{
+  skyUniforms={
+    top:{value:new THREE.Color('#0a1a3a')},
+    bottom:{value:new THREE.Color('#0a1020')},
+    glow:{value:new THREE.Color('#ff8a4a')},
+    glowAmt:{value:0.0}
+  };
+  const skyMat=new THREE.ShaderMaterial({
+    side:THREE.BackSide, depthWrite:false, fog:false, uniforms:skyUniforms,
+    vertexShader:'varying vec3 vP; void main(){ vP=position; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+    fragmentShader:'uniform vec3 top; uniform vec3 bottom; uniform vec3 glow; uniform float glowAmt; varying vec3 vP; void main(){ float h=normalize(vP).y; float t=pow(clamp(h*0.5+0.5,0.0,1.0),1.15); vec3 col=mix(bottom,top,t); float band=1.0-clamp(abs(h)*4.5,0.0,1.0); col+=glow*band*glowAmt; gl_FragColor=vec4(col,1.0); }'
+  });
+  const skyDome=new THREE.Mesh(new THREE.SphereGeometry(960,32,16), skyMat);
+  skyDome.renderOrder=-1;
+  scene.add(skyDome);
+}catch(e){ skyUniforms=null; }
+
 /* ---------------- shared glow texture ---------------- */
 function radialTexture(stops){
   const c=document.createElement('canvas'); c.width=c.height=128;
@@ -333,7 +380,7 @@ function groundTexture(){
   t.encoding=THREE.sRGBEncoding; t.anisotropy=renderer.capabilities.getMaxAnisotropy();
   return t;
 }
-const groundMat = new THREE.MeshStandardMaterial({map:groundTexture(), color:0x0c0f1a, roughness:.95});
+const groundMat = new THREE.MeshStandardMaterial({map:groundTexture(), color:0x0c0f1a, roughness:.46, metalness:.5, envMapIntensity:.85});
 const ground = new THREE.Mesh(new THREE.PlaneGeometry(1000,1000), groundMat);
 ground.rotation.x=-Math.PI/2; ground.position.y=-0.02; ground.receiveShadow=true; scene.add(ground);
 
@@ -408,7 +455,7 @@ function towerMaterial(siteKey, repX=1, repY=4){
   const tex=windowCanvases(th);
   tex.map.repeat.set(repX,repY); tex.emissive.repeat.set(repX,repY);
   const m=new THREE.MeshStandardMaterial({
-    map:tex.map, color:0xffffff, roughness:.85, metalness:.05,
+    map:tex.map, color:0xffffff, roughness:.6, metalness:.16, envMapIntensity:1.1,
     emissive:new THREE.Color(th.win), emissiveMap:tex.emissive, emissiveIntensity:0
   });
   m.userData.kind='win';
@@ -763,6 +810,44 @@ const fillNightMats=[];
   });
 }
 
+/* ---------------- distant horizon city (background depth) ---------------- */
+const horizonNightMats=[];
+{
+  // emissive window strip texture for far buildings
+  const hc=document.createElement('canvas'); hc.width=32; hc.height=96;
+  const hx=hc.getContext('2d'); hx.fillStyle='#000'; hx.fillRect(0,0,32,96);
+  for(let r=0;r<11;r++)for(let c=0;c<4;c++){
+    if(Math.random()<.32){ hx.fillStyle=Math.random()<.5?'#cfe2ff':'#ffd9a0';
+      hx.globalAlpha=.5+Math.random()*.5; hx.fillRect(c*8+2,r*8+2,4,5); hx.globalAlpha=1; }
+  }
+  const hEmis=new THREE.CanvasTexture(hc); hEmis.encoding=THREE.sRGBEncoding;
+
+  const mat=new THREE.MeshStandardMaterial({
+    color:0x0a0e1a, roughness:.9, metalness:.1,
+    emissive:0x8fb4e8, emissiveMap:hEmis, emissiveIntensity:0
+  });
+  mat.userData.dimmer=.7; horizonNightMats.push(mat);
+
+  const RINGS=[{r0:150,r1:210,h0:6,h1:16,n:130},{r0:210,r1:300,h0:10,h1:30,n:150}];
+  let total=0; RINGS.forEach(R=>total+=R.n);
+  const im=new THREE.InstancedMesh(new THREE.BoxGeometry(1,1,1), mat, total);
+  const mm=new THREE.Matrix4(), q=new THREE.Quaternion(), p=new THREE.Vector3(), s=new THREE.Vector3();
+  let i=0;
+  RINGS.forEach(R=>{
+    for(let k=0;k<R.n;k++){
+      const a=Math.random()*Math.PI*2, rad=R.r0+Math.random()*(R.r1-R.r0);
+      const x=Math.cos(a)*rad, z=Math.sin(a)*rad;
+      const w=6+Math.random()*10, d=6+Math.random()*10, h=R.h0+Math.random()*(R.h1-R.h0);
+      p.set(x,h/2,z);
+      q.setFromAxisAngle(new THREE.Vector3(0,1,0), a+Math.PI/2);
+      s.set(w,h,d); mm.compose(p,q,s); im.setMatrixAt(i++,mm);
+    }
+  });
+  im.instanceMatrix.needsUpdate=true;
+  im.castShadow=false; im.receiveShadow=false;
+  scene.add(im);
+}
+
 /* ---------------- cars (instanced + headlight glow points) ---------------- */
 const carColors=['#ffd166','#51e8ff','#ff5d8f','#b7ff5e','#ffffff','#ffa94d'];
 const baseCars=[];
@@ -981,7 +1066,12 @@ const FOG_DAY=new THREE.Color('#c0dbec'), FOG_NIGHT=new THREE.Color('#0a0e1f');
 const GROUND_DAY=new THREE.Color('#39415a'), GROUND_NIGHT=new THREE.Color('#171d2b');
 const ROAD_DAY=new THREE.Color('#2c3247'), ROAD_NIGHT=new THREE.Color('#181d2f');
 const SUN_WARM=new THREE.Color('#ffd9a8'), SUN_WHITE=new THREE.Color('#ffffff');
+// sky dome gradient: zenith (top) and horizon (bottom) for night vs day, plus glow tints
+const SKY_ZEN_NIGHT=new THREE.Color('#05080f'), SKY_ZEN_DAY=new THREE.Color('#3f6ea8');
+const SKY_HOR_NIGHT=new THREE.Color('#0d1830'), SKY_HOR_DAY=new THREE.Color('#a9c8e2');
+const CITY_GLOW=new THREE.Color('#2a4a6a'), SUNSET_GLOW=new THREE.Color('#ff8a4a');
 const _sky=new THREE.Color(),_fog=new THREE.Color(),_gr=new THREE.Color(),_ro=new THREE.Color(),_sc=new THREE.Color();
+const _skyTop=new THREE.Color(),_skyBot=new THREE.Color(),_skyGlow=new THREE.Color();
 // real local time of day as a 0–1 fraction (00:00 → 24:00)
 function realCycleT(){
   const d=new Date();
@@ -1030,20 +1120,27 @@ function applyCycle(elapsed){
   _sky.lerpColors(SKY_NIGHT,SKY_DAY,dayness);
   if(horizon>0)_sky.lerp(new THREE.Color('#e8956b'),horizon*.35);
   scene.background=_sky;
+  if(skyUniforms){
+    _skyTop.lerpColors(SKY_ZEN_NIGHT,SKY_ZEN_DAY,dayness); skyUniforms.top.value.copy(_skyTop);
+    _skyBot.lerpColors(SKY_HOR_NIGHT,SKY_HOR_DAY,dayness); skyUniforms.bottom.value.copy(_skyBot);
+    _skyGlow.lerpColors(CITY_GLOW,SUNSET_GLOW,horizon);    skyUniforms.glow.value.copy(_skyGlow);
+    skyUniforms.glowAmt.value = horizon*0.9 + night*0.16;  // sunset band + faint city glow at night
+  }
   _fog.lerpColors(FOG_NIGHT,FOG_DAY,dayness); scene.fog.color.copy(_fog);
   _gr.lerpColors(GROUND_NIGHT,GROUND_DAY,dayness); groundMat.color.copy(_gr);
   _ro.lerpColors(ROAD_NIGHT,ROAD_DAY,dayness);
   roadBaseMats.forEach(m=>m.color.copy(_ro));
 
   starMat.opacity=night*.9;
-  lampGlowMat.opacity=night*.85;
+  lampGlowMat.opacity=night*1.0;
   hlMat.opacity=.25+night*.75;
   clouds.forEach(c=>c.material.opacity=dayness*.42);
   grid.material.opacity=.16+night*.36;
 
-  const winBase=night*1.5;
+  const winBase=night*1.7;
   nightMats.forEach(m=>m.emissiveIntensity=winBase*(m.userData.dimmer||1));
   fillNightMats.forEach(m=>m.emissiveIntensity=winBase*(m.userData.dimmer||1));
+  horizonNightMats.forEach(m=>m.emissiveIntensity=winBase*(m.userData.dimmer||1));
   if(hovered||focusKey){
     const key=focusKey||hovered;
     (SITES[key].mats||[]).forEach(m=>m.emissiveIntensity=winBase+.6);
@@ -1056,7 +1153,7 @@ function applyCycle(elapsed){
     rd.edgeMat.emissiveIntensity=.08+night*.9+rd.flash*1.8;
   });
   dashMats.forEach(d=>d.m.opacity=.1+night*.45);
-  if(bloomPass) bloomPass.strength=.28+night*.55;
+  if(bloomPass) bloomPass.strength=.34+night*.72;
 
   const totalSec=cycleT*86400;
   const hh=Math.floor(totalSec/3600)%24, mm=Math.floor(totalSec/60)%60, ss=Math.floor(totalSec)%60;
@@ -1094,12 +1191,14 @@ try{
 /* ---------------- main loop ---------------- */
 const clock3=new THREE.Clock();
 let elapsed=0, lastTick=0;
+let lastEnv=0; const ENV_INTERVAL=IS_MOBILE?9:6;
 function tick(){
   const dt=Math.min(clock3.getDelta(),.05);
   elapsed+=dt;
   if(timeScale===1) cycleT=realCycleT();              // LIVE — exact real local time, no drift
   else cycleT=(cycleT+dt*timeScale/CYCLE)%1;           // HOLD freezes, 4× = fast preview
   applyCycle(elapsed);
+  if(cubeCam && elapsed-lastEnv>ENV_INTERVAL){ lastEnv=elapsed; captureEnv(); }
 
   // clouds drift
   clouds.forEach(c=>{c.position.x+=c.userData.v*dt;if(c.position.x>260)c.position.x=-260;});
@@ -1164,6 +1263,8 @@ function tick(){
   if(composer) composer.render(); else renderer.render(scene,camera);
   requestAnimationFrame(tick);
 }
+applyCycle(0);   // prime lights + sky before the first reflection capture
+captureEnv();
 tick();
 setTimeout(()=>document.getElementById('intro').classList.add('gone'),1200);
 

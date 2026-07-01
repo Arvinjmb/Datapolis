@@ -692,6 +692,7 @@ function dashTexture(){
 }
 const roadBaseMats=[], edgeMats=[], dashMats=[];
 const roadDefs=[];
+const sidewalkMat=new THREE.MeshStandardMaterial({color:0x2e3446,roughness:.88,metalness:.05,envMapIntensity:.5});
 const SITE_KEYS=Object.keys(SITES);
 
 ROADS.forEach(([a,b,strength],ri)=>{
@@ -727,6 +728,17 @@ ROADS.forEach(([a,b,strength],ri)=>{
     e.rotation.x=-Math.PI/2; e.rotation.z=angle;
     e.position.copy(mid).add(perp.clone().multiplyScalar(sg*width/2));
     e.position.y=.02; scene.add(e);
+  });
+
+  // sidewalks: raised concrete strip + curb face on both sides
+  const walkW=1.5;
+  [-1,1].forEach(sg=>{
+    const w=new THREE.Mesh(new THREE.BoxGeometry(walkW,.12,len),sidewalkMat);
+    w.rotation.y=angle;
+    w.position.copy(mid).add(perp.clone().multiplyScalar(sg*(width/2+.07+walkW/2)));
+    w.position.y=.06;
+    w.receiveShadow=true; w.castShadow=false;
+    scene.add(w);
   });
 
   roadDefs.push({a,b,A,B,dir,perp,len,width,strength,edgeMat,flash:0,
@@ -765,6 +777,7 @@ ROADS.forEach(([a,b,strength],ri)=>{
 
 /* ---------------- procedural background fill ---------------- */
 const fillNightMats=[];
+const roofSpots=[];
 {
   const FILLER={facade:'#161c2c',win:'#9fb6d8',density:.3};
   // shared window-style texture for filler (built once)
@@ -834,10 +847,43 @@ const fillNightMats=[];
       q.setFromAxisAngle(new THREE.Vector3(0,1,0), Math.random()<.5?0:Math.PI/2);
       scl.set(w,h,d);
       mm.compose(pos,q,scl); im.setMatrixAt(i,mm);
+      roofSpots.push({x:c.x,y:h,z:c.z,w,d});
     });
     im.instanceMatrix.needsUpdate=true;
     scene.add(im);
   });
+}
+
+/* ---------------- rooftop clutter (AC units, water tanks, antennas) ---------------- */
+{
+  const acSpots=[], tankSpots=[], antSpots=[];
+  roofSpots.forEach(r=>{
+    const cnt=Math.random()<.6?1:2;
+    for(let k=0;k<cnt;k++){
+      const rx=r.x+(Math.random()-.5)*r.w*.5, rz=r.z+(Math.random()-.5)*r.d*.5;
+      const roll=Math.random();
+      if(roll<.55) acSpots.push({x:rx,y:r.y,z:rz});
+      else if(roll<.8) tankSpots.push({x:rx,y:r.y,z:rz});
+      else antSpots.push({x:rx,y:r.y,z:rz});
+    }
+  });
+  const mm=new THREE.Matrix4(),q=new THREE.Quaternion(),p=new THREE.Vector3(),s=new THREE.Vector3();
+  const grey=new THREE.MeshStandardMaterial({color:0x3a4152,roughness:.85,metalness:.25,envMapIntensity:.6});
+  function scatter(geo,mat,spots,sy,rot){
+    if(!spots.length) return;
+    const im=new THREE.InstancedMesh(geo,mat,spots.length);
+    im.castShadow=false; im.receiveShadow=true;
+    spots.forEach((sp,i)=>{
+      const sc=.7+Math.random()*.7;
+      p.set(sp.x,sp.y+sy*sc,sp.z);
+      q.setFromAxisAngle(new THREE.Vector3(0,1,0),rot?Math.random()*Math.PI:0);
+      s.set(sc,sc,sc); mm.compose(p,q,s); im.setMatrixAt(i,mm);
+    });
+    im.instanceMatrix.needsUpdate=true; scene.add(im);
+  }
+  scatter(new THREE.BoxGeometry(.9,.5,.9),grey,acSpots,.25,true);                         // AC units
+  scatter(new THREE.CylinderGeometry(.42,.42,.9,10),grey,tankSpots,.45,false);            // water tanks
+  scatter(new THREE.CylinderGeometry(.03,.05,2.4,5),grey,antSpots,1.2,false);             // antennas
 }
 
 /* ---------------- distant horizon city (background depth) ---------------- */
@@ -944,6 +990,77 @@ const horizonNightMats=[];
     if(foliIM.instanceColor) foliIM.instanceColor.needsUpdate=true;
     scene.add(trunkIM); scene.add(foliIM);
   }
+}
+
+/* ---------------- animated LED billboards ---------------- */
+const billboards=[];
+{
+  const SPECS=[
+    {key:'google',   msg:'GOOGLE · 87.5B VISITS/MO · #1 GLOBAL',  fg:'#ffd76a'},
+    {key:'youtube',  msg:'YOUTUBE · 48B VISITS/MO · STREAM ON',   fg:'#ff4d5e'},
+    {key:'facebook', msg:'FACEBOOK · 11.4B VISITS/MO',            fg:'#4a8cff'},
+    {key:'tiktok',   msg:'TIKTOK · 2.1B WEB VISITS/MO',           fg:'#46f3ff'},
+  ];
+  SPECS.forEach(sp=>{
+    const site=SITES[sp.key]; if(!site||!site.topY) return;
+    const c=document.createElement('canvas'); c.width=256; c.height=48;
+    const x=c.getContext('2d');
+    const tex=new THREE.CanvasTexture(c); tex.encoding=THREE.sRGBEncoding;
+    const mat=new THREE.MeshBasicMaterial({map:tex,transparent:true,opacity:.92,side:THREE.DoubleSide,fog:false});
+    const w=Math.min(14,site.topY*.35), h=w*48/256;
+    const mesh=new THREE.Mesh(new THREE.PlaneGeometry(w,h),mat);
+    const y=site.topY*.62;
+    mesh.position.set(site.pos[0],y,site.pos[1]);
+    billboards.push({c,x,tex,mesh,msg:sp.msg,fg:sp.fg,off:Math.random()*600,site});
+    scene.add(mesh);
+  });
+}
+function updateBillboards(elapsed){
+  billboards.forEach(b=>{
+    // redraw at ~12fps to stay cheap
+    if(!b.next||elapsed>b.next){
+      b.next=elapsed+.085;
+      const {c,x}=b;
+      x.fillStyle='#05070c'; x.fillRect(0,0,c.width,c.height);
+      x.font='bold 30px "IBM Plex Mono",monospace';
+      x.fillStyle=b.fg;
+      const tw=x.measureText(b.msg).width+90;
+      const sx=c.width-((elapsed*54+b.off)%(tw+c.width));
+      x.fillText(b.msg,sx,34);
+      x.fillText(b.msg,sx+tw,34);
+      x.strokeStyle='rgba(255,255,255,.12)'; x.strokeRect(1,1,c.width-2,c.height-2);
+      b.tex.needsUpdate=true;
+    }
+    b.mesh.lookAt(camera.position.x,b.mesh.position.y,camera.position.z); // face camera around Y
+  });
+}
+
+/* ---------------- air traffic (planes with blinking strobes) ---------------- */
+const planes=[];
+{
+  const bodyGeo=new THREE.CylinderGeometry(.35,.35,4.4,8); bodyGeo.rotateX(Math.PI/2);
+  const wingGeo=new THREE.BoxGeometry(6.2,.12,1.1);
+  const bodyMat=new THREE.MeshStandardMaterial({color:0xd8dde8,roughness:.4,metalness:.6});
+  for(let i=0;i<3;i++){
+    const g=new THREE.Group();
+    g.add(new THREE.Mesh(bodyGeo,bodyMat));
+    const wing=new THREE.Mesh(wingGeo,bodyMat); wing.position.z=.2; g.add(wing);
+    const strobe=new THREE.Sprite(new THREE.SpriteMaterial({map:glowTex,color:0xff3b3b,transparent:true,opacity:.9,blending:THREE.AdditiveBlending,depthWrite:false,fog:false}));
+    strobe.scale.set(3,3,1); strobe.position.y=.5; g.add(strobe);
+    const alt=95+Math.random()*45, r=260+Math.random()*120;
+    planes.push({g,strobe,alt,r,a:Math.random()*Math.PI*2,speed:(.014+Math.random()*.01)*(Math.random()<.5?1:-1),ph:Math.random()*7});
+    scene.add(g);
+  }
+}
+function updatePlanes(dt,elapsed){
+  planes.forEach(p=>{
+    p.a+=p.speed*dt;
+    const x=Math.cos(p.a)*p.r, z=Math.sin(p.a)*p.r;
+    p.g.position.set(x,p.alt,z);
+    const nx=Math.cos(p.a+p.speed*2)*p.r, nz=Math.sin(p.a+p.speed*2)*p.r;
+    p.g.lookAt(nx,p.alt,nz);
+    p.strobe.material.opacity=(Math.sin(elapsed*6+p.ph)>0.86)?1:0.06; // aviation strobe blink
+  });
 }
 
 /* ---------------- cars (instanced + headlight glow points) ---------------- */
@@ -1295,7 +1412,7 @@ function applyCycle(elapsed){
 }
 
 /* ---------------- post-processing (bloom + gamma + FXAA) ---------------- */
-let composer=null, bloomPass=null, fxaaPass=null;
+let composer=null, bloomPass=null, fxaaPass=null, cinePass=null;
 try{
   if(THREE.EffectComposer && THREE.RenderPass && THREE.UnrealBloomPass && THREE.ShaderPass){
     composer=new THREE.EffectComposer(renderer);
@@ -1311,6 +1428,25 @@ try{
       fxaaPass.material.uniforms.resolution.value.set(1/(innerWidth*pr),1/(innerHeight*pr));
       composer.addPass(fxaaPass);
     }
+    // cinematic finish: subtle film grain + vignette
+    const CinematicShader={
+      uniforms:{ tDiffuse:{value:null}, time:{value:0} },
+      vertexShader:'varying vec2 vUv; void main(){ vUv=uv; gl_Position=projectionMatrix*modelViewMatrix*vec4(position,1.0); }',
+      fragmentShader:[
+        'uniform sampler2D tDiffuse; uniform float time; varying vec2 vUv;',
+        'float rnd(vec2 co){ return fract(sin(dot(co, vec2(12.9898,78.233))+time)*43758.5453); }',
+        'void main(){',
+        '  vec4 col=texture2D(tDiffuse,vUv);',
+        '  float g=(rnd(vUv)-.5)*.045;',                     // film grain
+        '  col.rgb+=g;',
+        '  vec2 d=vUv-.5; float vig=1.0-dot(d,d)*.85;',      // vignette
+        '  col.rgb*=clamp(vig,0.0,1.0);',
+        '  gl_FragColor=col;',
+        '}'
+      ].join('\n')
+    };
+    cinePass=new THREE.ShaderPass(CinematicShader);
+    composer.addPass(cinePass);
   }
 }catch(err){ composer=null; bloomPass=null; fxaaPass=null; }
 
@@ -1324,6 +1460,8 @@ function tick(){
   if(timeScale===1) cycleT=realCycleT();              // LIVE — exact real local time, no drift
   else cycleT=(cycleT+dt*timeScale/CYCLE)%1;           // HOLD freezes, 4× = fast preview
   applyCycle(elapsed);
+  updateBillboards(elapsed);
+  updatePlanes(dt,elapsed);
   if(cubeCam && elapsed-lastEnv>ENV_INTERVAL){ lastEnv=elapsed; captureEnv(); }
 
   // clouds drift
@@ -1389,6 +1527,7 @@ function tick(){
   }
   if(hovered){tip.style.left=mousePix.x+'px';tip.style.top=mousePix.y+'px';}
 
+  if(cinePass) cinePass.uniforms.time.value=elapsed%37;
   if(composer) composer.render(); else renderer.render(scene,camera);
   requestAnimationFrame(tick);
 }
